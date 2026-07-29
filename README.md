@@ -50,6 +50,7 @@ TangutSeg\
 ├── run_seg.py              # 分词主程序
 ├── run_tag.py              # 词性标注主程序
 ├── run_pretrain.py         # 预训练模型训练主程序
+├── saved_models\           # 保存的最优模型(有待更新)
 └── requirements.txt
 ```
 
