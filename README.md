@@ -137,7 +137,7 @@ python run_pretrain.py
 ```bash
 --train-w2v  # 训练Char2Vec模型并保存
 --pretrain   # 进行MLM预训练TangutEncoder模型
-    --masked-mode <mixed(默认)/single>  # 指定MLM掩码模式，mixed为混合掩码，single为单字掩码
+    --masked-mode <string>  # 指定MLM掩码模式，mixed为混合掩码，single为单字掩码(默认)
     --max-steps <int>          # 预训练最大步数，默认5000
     --batch-size <int>         # 预训练批量大小，默认32
 --phase2     # 对TangutEncoder进行第二阶段的词感知预训练，需要先进行上一阶段训练
