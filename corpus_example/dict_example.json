@@ -1,0 +1,54 @@
+[
+    {
+        "unicode": "17000",
+        "xixia_character": "𗀀",
+        "pron": [
+            "诺"
+        ],
+        "shiyi": [
+            {
+                "part": [
+                    "名詞",
+                    "動詞"
+                ],
+                "shiyi": "毒"
+            },
+            {
+                "part": [],
+                "shiyi": "蛊"
+            }
+        ],
+        "term_list": [
+            {
+                "term_character": "𗀀𗻊",
+                "info": "1-1",
+                "pron": [
+                    "do",
+                    "do"
+                ],
+                "shiyi": [
+                    {
+                        "type": "義",
+                        "shiyi": "毒",
+                        "说明": []
+                    }
+                ]
+            },
+            {
+                "term_character": "𗀀𘉹",
+                "info": "1-1",
+                "pron": [
+                    "do",
+                    "tsju"
+                ],
+                "shiyi": [
+                    {
+                        "type": "義",
+                        "shiyi": "毒恨",
+                        "说明": []
+                    }
+                ]
+            }
+        ]
+    }
+]
