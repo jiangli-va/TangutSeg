@@ -4,9 +4,9 @@
 
 TangutSeg 是一个面向**西夏文自动分词**的研究项目，也是已知**首个**系统研究西夏文自动分词和词性标注的工作。
 
-西夏文(Tangut script)创制于公元11世纪的西夏(Xixia)王朝，是一种用于书写西夏语的语素文字。该文字由西夏统治者李元昊命文臣野利仁荣创制，定为“国书”。西夏于1227年亡于蒙古帝国，西夏文也随之逐渐湮灭无闻。西夏文的创立虽然字形与汉字相仿，但避免了与汉字的雷同。西夏语属汉藏语系的羌语支，西夏人的语言已灭绝，学术界认为其与现代的羌语和嘉绒语关系最密切。西夏文字是记录党项族语言的文字，目前总计约6000余字。其结构多仿汉字，行体方整，但笔划繁复。独体字较少，由2个字甚至3、4个字合成一字者居多数。
+西夏文(Tangut script)创制于公元11世纪的西夏王朝(Xixia)，是一种用于书写西夏语的语素文字。该文字由西夏统治者李元昊命文臣野利仁荣创制，定为“国书”。西夏于1227年被蒙古帝国所灭，西夏文也随之逐渐湮灭无闻。西夏语属汉藏语系的羌语支，西夏人的语言现已灭绝，学术界认为其与现代的羌语和嘉绒语关系最密切。西夏文字形与汉字相仿，目前总计约6000余字，行体方整，笔划繁复。独体字较少，由2个字甚至3、4个字合成一字者居多数。
 
-西夏文连续书写，词与词之间无显式分隔符，且不再有母语者能够参与标注。本项目由中国社会科学院西夏文专家逐句标注的 2,750 句语料（31,893 词次）作为监督信号，同时引入两类外部资源：**传统西夏文辞书**（约 19,000 个多字词条）和**四行对译材料中的无标注西夏文文本**（约 36 万字符），在极低资源条件下构建分词系统。
+西夏文连续书写，词与词之间无显式分隔符，且不再有母语者能够参与标注。本项目将中国社会科学院西夏文专家逐句标注的 2,750 句语料（31,893 词次）作为监督信号，同时引入两类外部资源：**传统西夏文辞书**（约 19,000 个多字词条）和**四行对译材料中的无标注西夏文文本**（约 36 万字符），在极低资源条件下构建分词系统。
 
 由于西夏文数据稀缺且宝贵，标注语料成本高昂，本项目目前没有公开全部训练数据的计划，但提供了少量的语料示例(`corpus_example/`)。同时，我们将开源所有训练代码，供研究者参考。未来我们将开源成熟的最优分词模型，供学界使用。
 
@@ -135,34 +135,34 @@ python run_pretrain.py
 - 参数说明
 
 ```bash
---train-w2v    # 训练Char2Vec模型并保存
---pretrain     # 进行MLM预训练TangutEncoder模型
+--train-w2v  # 训练Char2Vec模型并保存
+--pretrain   # 进行MLM预训练TangutEncoder模型
     --masked-mode <mixed(默认)/single>  # 指定MLM掩码模式，mixed为混合掩码，single为单字掩码
-    --max-steps <int>  # 预训练最大步数，默认5000
-    --batch-size <int> # 预训练批量大小，默认32
---phase2       # 对TangutEncoder进行第二阶段的词感知预训练，需要先进行上一阶段训练
-    --lambda-word <float> # 词损失权重，默认0.3
-    --lr-encoder <float>  # 编码器学习率，默认5e-5
-    --lr-span-head <float> # span head学习率，默认3e-4
-    --phase2-max-steps <int> # 第二阶段预训练最大步数，默认3000
-    --word-warmup-steps <int> # 词损失warmup步数，默认500
-    --num-neg-per-pos <int> # 每个正样本对应的负样本数量，默认5
-    --eval-interval <int> # 评估间隔步数，默认200
+    --max-steps <int>          # 预训练最大步数，默认5000
+    --batch-size <int>         # 预训练批量大小，默认32
+--phase2     # 对TangutEncoder进行第二阶段的词感知预训练，需要先进行上一阶段训练
+    --lambda-word <float>      # 词损失权重，默认0.3
+    --lr-encoder <float>       # 编码器学习率，默认5e-5
+    --lr-span-head <float>     # span head学习率，默认3e-4
+    --phase2-max-steps <int>   # 第二阶段预训练最大步数，默认3000
+    --word-warmup-steps <int>  # 词损失warmup步数，默认500
+    --num-neg-per-pos <int>    # 每个正样本对应的负样本数量，默认5
+    --eval-interval <int>      # 评估间隔步数，默认200
     --early-stop-patience <int> # 早停耐心值，默认5
-    --grad-clip <float> # 梯度裁剪阈值，默认1.0
-    --weight-decay <float> # 权重衰减，默认0.01
+    --grad-clip <float>        # 梯度裁剪阈值，默认1.0
+    --weight-decay <float>     # 权重衰减，默认0.01
     --phase2-output-dir <path> # 第二阶段预训练输出目录，默认"output/pretrain/tangut_encoder_phase2"
---seg          # 运行下游分词任务评估
-    --cv       # 启用K折交叉验证，默认5折
-    --folds <int> # 指定交叉验证折数
-    --max <int> # 截断训练语料前max条，用于快速调试
-    --methods <list> # 指定训练方法，默认全部，多个方法用逗号隔开
-        TEnc-Random   # 随机Transformer + BIES-CRF
-        TEnc-Char2Vec # Word2Vec 字符向量初始化 + BIES-CRF
-        TEnc-Random+dict  # 随机Transformer + 词典特征
-        TEnc-MLM+dict     # MLM预训练Transformer + 词典特征
-        TEnc-MLM+dict+gap # MLM预训练Transformer + 词典特征 + gap特征
-        CRF-U # 对照当前最优CRF模型（dict_all + dist_all）
-    --w2v-model <path> # 指定预训练的Char2Vec模型路径
---pretrained-model <path>   # 指定预训练模型，直接做下游评估
+--seg       # 运行下游分词任务评估
+    --cv                       # 启用K折交叉验证，默认5折
+    --folds <int>              # 指定交叉验证折数
+    --max <int>                # 截断训练语料前max条，用于快速调试
+    --methods <list>           # 指定训练方法，默认全部，多个方法用逗号隔开
+        TEnc-Random            # 随机Transformer + BIES-CRF
+        TEnc-Char2Vec          # Word2Vec 字符向量初始化 + BIES-CRF
+        TEnc-Random+dict       # 随机Transformer + 词典特征
+        TEnc-MLM+dict          # MLM预训练Transformer + 词典特征
+        TEnc-MLM+dict+gap      # MLM预训练Transformer + 词典特征 + gap特征
+        CRF-U                  # 对照当前最优CRF模型（dict_all + dist_all）
+    --w2v-model <path>         # 指定预训练的Char2Vec模型路径
+--pretrained-model <path> # 指定预训练模型，直接做下游评估
 ```
