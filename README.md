@@ -64,7 +64,7 @@ TangutSeg\
 pip install -r requirements.txt
 ```
 
-### 训练基础分词模型(`crf` or `bilstm_crf`)
+### 训练基础分词模型(`CRF` or `BiLSTM-CRF`)
 
 ```bash
 python run_seg.py
