@@ -266,8 +266,8 @@ Linear CRF 使用字符、上下文字符、相邻二元组、标点及单字成
 
 \[
 r(w)=
-\frac{\operatorname{hit}(w)+\kappa p_{g(w)}}
-{\operatorname{occ}(w)+\kappa}.
+\frac{\text{hit}(w)+\kappa p_{g(w)}}
+{\text{occ}(w)+\kappa}.
 \]
 
 其中，`hit` 表示与人工词界完全一致的次数，`occ` 表示作为子串出现的次数，`p_g` 是对应词长组的先验可靠度。
