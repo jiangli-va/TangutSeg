@@ -41,7 +41,8 @@ TangutSeg\
 │   ├── jingshu.txt         # 标注经书语料示例
 │   ├── shisu.txt           # 标注世俗文献语料示例
 │   ├── dict_example.json   # 西夏文结构化词典示例
-│   └── sihang.txt          # 无标注文本示例
+│   ├── sihang.txt          # 无标注文本示例
+│   └── Tangut_N4694_V3.10.ttf  # 西夏文字体文件
 ├── data\                   # 数据处理脚本
 ├── models\                 # 分词模型训练程序
 ├── evaluation\             # 评测脚本
