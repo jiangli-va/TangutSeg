@@ -192,12 +192,11 @@ class TangutEncoderBIESCRF(nn.Module):
         self.end_transitions = nn.Parameter(torch.randn(tagset_size) * 0.01)
 
         # BIES 转移约束: B=0, I=1, E=2, S=3
-        # 合法转移: B→I, B→E | I→E | E→B, E→S | S→B, S→S
+        # 合法转移: B→I, B→E | I→I, I→E | E→B, E→S | S→B, S→S
         self._trans_mask = torch.ones(tagset_size, tagset_size, dtype=torch.bool)
         self._trans_mask[0, 0] = False  # B → B
         self._trans_mask[0, 3] = False  # B → S
         self._trans_mask[1, 0] = False  # I → B
-        self._trans_mask[1, 1] = False  # I → I
         self._trans_mask[1, 3] = False  # I → S
         self._trans_mask[2, 1] = False  # E → I
         self._trans_mask[2, 2] = False  # E → E
@@ -210,6 +209,25 @@ class TangutEncoderBIESCRF(nn.Module):
         self._end_mask = torch.tensor([False, False, True, True], dtype=torch.bool)  # E, S only
         self.register_buffer('_start_mask_buffer', self._start_mask.clone(), persistent=False)
         self.register_buffer('_end_mask_buffer', self._end_mask.clone(), persistent=False)
+
+    def _constrained_crf_params(
+        self,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """返回应用了 BIES 约束的句首、转移和句尾分数。
+
+        训练的配分函数与 Viterbi 解码必须使用完全相同的路径空间；
+        否则模型会把概率质量分配给推理阶段不允许出现的非法序列。
+        """
+        start = self.start_transitions.masked_fill(
+            ~self._start_mask_buffer, float("-inf"),
+        )
+        transitions = self.transitions.masked_fill(
+            ~self._trans_mask_buffer, float("-inf"),
+        )
+        end = self.end_transitions.masked_fill(
+            ~self._end_mask_buffer, float("-inf"),
+        )
+        return start, transitions, end
 
     def forward(
         self,
@@ -255,6 +273,8 @@ class TangutEncoderBIESCRF(nn.Module):
     ) -> torch.Tensor:
         batch_size, seq_len, _ = emissions.shape
         score = emissions.new_zeros(batch_size)
+        # Gold 标签由 words_to_bies 生成，天然满足 BIES 约束。这里保留原始
+        # 参数以避免 padding 标签命中 -inf 后出现 (-inf * 0) = NaN。
         score += (self.start_transitions[tags[:, 0]] +
                   emissions[range(batch_size), 0, tags[:, 0]]) * mask[:, 0]
         for t in range(seq_len - 1):
@@ -271,16 +291,17 @@ class TangutEncoderBIESCRF(nn.Module):
         self, emissions: torch.Tensor, mask: torch.Tensor,
     ) -> torch.Tensor:
         batch_size, seq_len, tagset_size = emissions.shape
-        mask_float = mask.float()
-        alpha = self.start_transitions + emissions[:, 0]
+        start, transitions, end = self._constrained_crf_params()
+        alpha = start + emissions[:, 0]
         for t in range(1, seq_len):
             emit_t = emissions[:, t].unsqueeze(1)
-            trans_t = self.transitions.unsqueeze(0)
+            trans_t = transitions.unsqueeze(0)
             alpha_t = alpha.unsqueeze(2) + trans_t + emit_t
             next_alpha = log_sum_exp(alpha_t, dim=1)
-            m = mask_float[:, t].unsqueeze(1)
-            alpha = next_alpha * m + alpha * (1 - m)
-        last_alpha = alpha + self.end_transitions.unsqueeze(0)
+            # 不能用 next_alpha*m + alpha*(1-m)：约束分数中的 -inf
+            # 即使乘 0 也会产生 NaN。
+            alpha = torch.where(mask[:, t].unsqueeze(1), next_alpha, alpha)
+        last_alpha = alpha + end.unsqueeze(0)
         return log_sum_exp(last_alpha, dim=1)
 
     def neg_log_likelihood(
@@ -313,19 +334,10 @@ class TangutEncoderBIESCRF(nn.Module):
         self, emissions: torch.Tensor, mask: torch.Tensor,
     ) -> List[List[int]]:
         batch_size, seq_len, tagset_size = emissions.shape
-        mask_float = mask.float()
 
-        # 应用 BIES 转移约束: 非法转移设为 -inf
-        trans_constrained = self.transitions.clone()
-        trans_constrained[~self._trans_mask_buffer] = float('-inf')
-
-        # 句首约束
-        start_constrained = self.start_transitions.clone()
-        start_constrained[~self._start_mask_buffer] = float('-inf')
-
-        # 句尾约束
-        end_constrained = self.end_transitions.clone()
-        end_constrained[~self._end_mask_buffer] = float('-inf')
+        start_constrained, trans_constrained, end_constrained = (
+            self._constrained_crf_params()
+        )
 
         scores = start_constrained + emissions[:, 0]
         backpointers = []
@@ -333,8 +345,9 @@ class TangutEncoderBIESCRF(nn.Module):
             next_scores = (scores.unsqueeze(2) + trans_constrained.unsqueeze(0)
                            + emissions[:, t].unsqueeze(1))
             best_scores, best_tags = next_scores.max(dim=1)
-            m = mask_float[:, t].unsqueeze(1)
-            scores = best_scores * m + scores * (1 - m)
+            scores = torch.where(
+                mask[:, t].unsqueeze(1), best_scores, scores,
+            )
             backpointers.append(best_tags)
 
         scores = scores + end_constrained.unsqueeze(0)
@@ -342,8 +355,9 @@ class TangutEncoderBIESCRF(nn.Module):
 
         best_paths = []
         for b in range(batch_size):
+            valid_len = int(mask[b].sum().item())
             path = [best_last_tags[b]]
-            for bp in reversed(backpointers):
+            for bp in reversed(backpointers[:max(valid_len - 1, 0)]):
                 path.append(bp[b, path[-1]].item())
             path.reverse()
             best_paths.append(path)
