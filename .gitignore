@@ -1,0 +1,68 @@
+# =========================
+# Private training data
+# =========================
+/corpus/
+
+/同音.json
+/文海数据.json
+/西夏文词典.json
+/提取四行对译中的西夏字（以典籍的图片为单位）.json
+/*人民日报语料*.txt
+/processedTangutExtraction*.txt
+
+# Files containing corpus examples or derived text
+/corpus_oov_sentences.txt
+/errors.txt
+/count.txt
+/output/corpus_oov_sentences.txt
+/output/dict_coverage_analysis.json
+/output/tangut_vocab_scan.tsv
+
+# =========================
+# Python and environments
+# =========================
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+.ipynb_checkpoints/
+
+# IDE and temporary files
+.vscode/
+.idea/
+.DS_Store
+/tmp/
+/.agents/
+/.codex/
+
+# =========================
+# Generated outputs
+# =========================
+/output/*
+
+# Keep experimental results and logs
+!/output/results*.json
+!/output/results*.md
+!/output/run_log*.jsonl
+!/output/overfit_analysis_*.png
+
+# Keep the selected pretrained model
+!/output/pretrain/
+/output/pretrain/*
+!/output/pretrain/tangut_encoder_mixed/
+/output/pretrain/tangut_encoder_mixed/*
+!/output/pretrain/tangut_encoder_mixed/best_model0721.pt
+!/output/pretrain/tangut_encoder_mixed/vocab.pt
+!/output/pretrain/tangut_encoder_mixed/training_log.json
+
+# Other model checkpoints are ignored
+/saved_models/
+# Allow saved_models for deployment (small files, ~12MB total)
+!/saved_models/
+*.ckpt
+*.pth
+# Allow .pkl only inside saved_models/
+*.pkl
+!/saved_models/*.pkl
