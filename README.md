@@ -53,9 +53,9 @@ TangutSeg\
 ├── tag_model\              # 词性标注模型训练程序
 ├── utils\                  # 工具脚本
 ├── config.py               # 配置文件
-├── train_seg.py            # 分词主程序
-├── train_tag.py            # 词性标注主程序
-├── train_pretrain.py       # 预训练模型训练主程序
+├── train_seg.py            # 分词模型训练程序
+├── train_tag.py            # 词性标注模型训练程序
+├── train_pretrain.py       # 预训练模型训练程序
 ├── saved_models\           # 保存的最优模型(有待更新)
 ├── run_seg.py              # 分词主程序
 └── requirements.txt
