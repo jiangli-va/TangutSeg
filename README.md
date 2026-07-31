@@ -53,10 +53,11 @@ TangutSeg\
 ├── tag_model\              # 词性标注模型训练程序
 ├── utils\                  # 工具脚本
 ├── config.py               # 配置文件
-├── run_seg.py              # 分词主程序
-├── run_tag.py              # 词性标注主程序
-├── run_pretrain.py         # 预训练模型训练主程序
+├── train_seg.py            # 分词主程序
+├── train_tag.py            # 词性标注主程序
+├── train_pretrain.py       # 预训练模型训练主程序
 ├── saved_models\           # 保存的最优模型(有待更新)
+├── run_seg.py              # 分词主程序
 └── requirements.txt
 ```
 
@@ -71,7 +72,7 @@ pip install -r requirements.txt
 ### 训练基础分词模型(`CRF` or `BiLSTM-CRF`)
 
 ```bash
-python run_seg.py
+python train_seg.py
 ```
 
 - 运行参数说明
@@ -110,7 +111,7 @@ python run_seg.py
 ### 训练分词-词性标注联合模型
 
 ```bash
-python run_tag.py
+python train_tag.py
 ```
 - 参数说明
 
@@ -134,7 +135,7 @@ python run_tag.py
 ### 训练预训练模型(`Transformer-Random`, `Transformer-Char2Vec` or `TangutEncoder`)
 
 ```bash
-python run_pretrain.py
+python train_pretrain.py
 ```
 - 参数说明
 
