@@ -805,15 +805,86 @@ class TangutEncoderSegmenter(Segmenter):
 
     # ---------- 持久化 ----------
     def save(self, path: str) -> None:
+        """保存完整推理模型到 .pt 文件。
+
+        包含:
+            - 完整 TangutEncoderBIESCRF 权重 (encoder + dict/gap proj + CRF)
+            - 词表 (char2idx, tag2idx)
+            - 架构配置 (用于重建模型)
+            - 特征级别 (dict_feature_level, gap_feature_level)
+        """
         torch.save({
             "model_state_dict": self._model.state_dict(),
             "char2idx": self._char2idx,
             "tag2idx": self._tag2idx,
+            # 架构配置
+            "vocab_size": len(self._char2idx),
+            "d_model": self._d_model,
+            "num_layers": self._num_layers,
+            "num_heads": self._num_heads,
+            "dim_feedforward": self._dim_feedforward,
+            "max_length": self._max_length,
+            "dropout": self._encoder_dropout,
+            # 特征配置
+            "dict_feature_dim": self._get_dict_feat_dim() if self._use_dict else 0,
+            "gap_feature_dim": self._get_gap_feat_dim() if self._use_gap else 0,
+            "dict_feature_level": self._dict_feature_level,
+            "gap_feature_level": self._gap_feature_level,
         }, path)
 
     def load(self, path: str) -> None:
+        """从 .pt 文件加载模型权重与词表。"""
         checkpoint = torch.load(path, map_location=self._device)
         self._char2idx = checkpoint["char2idx"]
         self._tag2idx = checkpoint["tag2idx"]
         self._idx2tag = {v: k for k, v in self._tag2idx.items()}
-        # 此处不重新构建模型，需由调用方配合
+
+        # 恢复架构配置
+        self._vocab_size = checkpoint.get("vocab_size", len(self._char2idx))
+        self._d_model = checkpoint.get("d_model", 192)
+        self._num_layers = checkpoint.get("num_layers", 3)
+        self._num_heads = checkpoint.get("num_heads", 4)
+        self._dim_feedforward = checkpoint.get("dim_feedforward", 768)
+        self._max_length = checkpoint.get("max_length", 128)
+        self._encoder_dropout = checkpoint.get("dropout", 0.15)
+        self._dict_feature_level = checkpoint.get("dict_feature_level", 0)
+        self._gap_feature_level = checkpoint.get("gap_feature_level", 0)
+
+        dict_feat_dim = checkpoint.get("dict_feature_dim", 0)
+        gap_feat_dim = checkpoint.get("gap_feature_dim", 0)
+
+        # 重建编码器
+        encoder = TangutEncoderS(
+            vocab_size=self._vocab_size,
+            d_model=self._d_model,
+            num_layers=self._num_layers,
+            num_heads=self._num_heads,
+            dim_feedforward=self._dim_feedforward,
+            max_length=self._max_length,
+            dropout=self._encoder_dropout,
+            pad_idx=self._char2idx.get("[PAD]", 0),
+        )
+
+        # 重建完整模型
+        self._model = TangutEncoderBIESCRF(
+            encoder=encoder,
+            tagset_size=4,
+            dict_feat_dim=dict_feat_dim,
+            gap_feat_dim=gap_feat_dim,
+            dropout=self._head_dropout,
+            pad_idx=self._char2idx.get("[PAD]", 0),
+        ).to(self._device)
+
+        self._model.load_state_dict(checkpoint["model_state_dict"])
+
+    def set_extractors(
+        self,
+        lexicon_extractor=None,
+        unlabeled_extractor=None,
+    ) -> None:
+        """设置推理时需要的特征提取器（从 saved_models/ 的 .pkl 加载后调用）。"""
+        if lexicon_extractor is not None:
+            self._lexicon_extractor = lexicon_extractor
+            self._extractor_for_inference = lexicon_extractor
+        if unlabeled_extractor is not None:
+            self._unlabeled_extractor = unlabeled_extractor
