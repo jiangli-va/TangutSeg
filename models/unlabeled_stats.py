@@ -182,6 +182,42 @@ class UnlabeledStatsExtractor:
     def is_loaded(self) -> bool:
         return self._loaded
 
+    # ---------- 序列化 ----------
+    def save(self, path: str) -> None:
+        """保存全部 bigram 统计到文件，可在推理服务中恢复。"""
+        import pickle
+        # tuple key → string key (JSON 不支持 tuple key)
+        state = {
+            "bigram_metric": self._bigram_metric,
+            "bigram_freq": {"|".join(k): v for k, v in self._bigram_freq.items()},
+            "unigram_freq": dict(self._unigram_freq),
+            "left_adj": {k: dict(v) for k, v in self._left_adj.items()},
+            "right_adj": {k: dict(v) for k, v in self._right_adj.items()},
+            "total_bigrams": self._total_bigrams,
+        }
+        with open(path, "wb") as f:
+            pickle.dump(state, f)
+
+    def load_state(self, path: str) -> None:
+        """从保存的文件恢复 bigram 统计状态并重新计算派生度量。"""
+        import pickle
+        with open(path, "rb") as f:
+            state = pickle.load(f)
+
+        self._bigram_metric = state["bigram_metric"]
+        self._bigram_freq = {tuple(k.split("|")): v for k, v in state["bigram_freq"].items()}
+        self._unigram_freq = Counter(state["unigram_freq"])
+        self._left_adj = {k: Counter(v) for k, v in state["left_adj"].items()}
+        self._right_adj = {k: Counter(v) for k, v in state["right_adj"].items()}
+        self._total_bigrams = state["total_bigrams"]
+
+        self._bigram_logfreq = {}
+        self._bigram_assoc = {}
+        self._char_ent_left = {}
+        self._char_ent_right = {}
+        self._compute_derived()
+        self._loaded = True
+
     # ---------- 内部计算 ----------
     def _compute_derived(self) -> None:
         """预计算 log-freq, 关联度量 (三选一), 邻接熵。"""

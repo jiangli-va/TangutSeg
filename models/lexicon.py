@@ -401,6 +401,58 @@ class LexiconFeatureExtractor:
         """设置按词长桶的类别先验 p_g。"""
         self._class_priors = priors
 
+    # ---------- 序列化 ----------
+    def save(self, path: str) -> None:
+        """保存词典提取器完整状态到文件，可在推理服务中恢复。"""
+        import pickle
+        # 序列化 trie: 把所有词条展平为 (word, info) 列表
+        trie_entries: List[Tuple[str, Dict]] = []
+
+        def _collect(node: _TrieNode, prefix: str):
+            if node.word_info is not None:
+                trie_entries.append((prefix, node.word_info))
+            for ch, child in node.children.items():
+                _collect(child, prefix + ch)
+
+        if self._trie is not None:
+            _collect(self._trie.root, "")
+
+        # 可靠度: dataclass → dict
+        rel_dict = {}
+        for word, ri in self._reliability.items():
+            rel_dict[word] = {
+                "value": ri.value, "observed": ri.observed,
+                "occ": ri.occ, "hit": ri.hit, "p_g": ri.p_g,
+            }
+
+        state = {
+            "trie_entries": trie_entries,
+            "reliability": rel_dict,
+            "class_priors": dict(self._class_priors),
+        }
+        with open(path, "wb") as f:
+            pickle.dump(state, f)
+
+    def load_state(self, path: str) -> None:
+        """从保存的文件恢复词典提取器状态。"""
+        import pickle
+        with open(path, "rb") as f:
+            state = pickle.load(f)
+
+        self._trie = Trie()
+        for word, info in state["trie_entries"]:
+            self._trie.insert(word, info)
+
+        self._reliability = {}
+        for word, rd in state["reliability"].items():
+            self._reliability[word] = ReliabilityInfo(
+                value=rd["value"], observed=rd["observed"],
+                occ=rd["occ"], hit=rd["hit"], p_g=rd["p_g"],
+            )
+
+        self._class_priors = state["class_priors"]
+        self._loaded = True
+
     @property
     def has_reliability(self) -> bool:
         return len(self._reliability) > 0
