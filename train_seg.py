@@ -76,7 +76,8 @@ from utils.helpers import (format_metrics_table, format_category_table,
                            save_results, append_run_log,
                            aggregate_cv_results, format_cv_table,
                            aggregate_cv_category_results,
-                           format_cv_category_table, Timer)
+                           format_cv_category_table, Timer,
+                           save_inference_model)
 from models.base import Segmenter
 
 
@@ -494,6 +495,8 @@ def main():
                         help="使用 K 折交叉验证（对所有方法），报告均值±标准差")
     parser.add_argument("--folds", type=int, default=5,
                         help="交叉验证折数（默认 5）")
+    parser.add_argument("--save-model", type=str, default=None,
+                        help="训练完成后保存指定方法的推理模型, e.g. 'CRF+dict_full'")
     args = parser.parse_args()
 
     # 解析方法列表
@@ -573,6 +576,10 @@ def main():
     print("=" * 60)
 
     results, cat_results = train_eval_dataset(methods, dataset, verbose=True)
+
+    # ---- 保存推理模型 (--save-model) ----
+    if args.save_model:
+        save_inference_model(methods, args.save_model, BASE)
 
     # ==================== Step 5: 汇总对比 ====================
     print("\n" + "=" * 60)
