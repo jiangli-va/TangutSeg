@@ -289,64 +289,10 @@ def evaluate_per_category(
 # 保存推理模型
 # ============================================================
 
-def _save_inference_model(
-    methods: Dict[str, Segmenter],
-    method_name: str,
-    lexicon_extractor=None,
-) -> None:
-    """保存完整推理模型到 saved_models/ 目录。
-
-    保存内容:
-        - <name>_model.pt:   完整模型权重 + 词表 + 架构配置 (TangutEncoderSegmenter.save)
-        - <name>_lexicon.pkl: 词典特征提取器状态 (Trie + 可靠度 + 先验)
-        - <name>_gap.pkl:     无标注语料 bigram 统计
-    """
-    from pretrain.segmenter import TangutEncoderSegmenter
-    from models.unlabeled_stats import UnlabeledStatsExtractor
-
-    saved_models_dir = BASE / "saved_models"
-    saved_models_dir.mkdir(parents=True, exist_ok=True)
-
-    if method_name not in methods:
-        print(f"[WARN] 方法 '{method_name}' 未找到，不可保存。可用方法: {list(methods.keys())}")
-        return
-
-    segmenter = methods[method_name]
-
-    if not isinstance(segmenter, TangutEncoderSegmenter):
-        print(f"[WARN] '{method_name}' 不是 TangutEncoderSegmenter，无法保存为推理模型")
-        return
-
-    print(f"\n{'=' * 60}")
-    print(f"  Saving inference model: {method_name}")
-    print(f"{'=' * 60}\n")
-
-    # 1) 保存完整模型
-    model_path = saved_models_dir / f"{method_name}_model.pt"
-    segmenter.save(str(model_path))
-    print(f"  ✓ Model saved to {model_path}")
-
-    # 2) 保存词典特征提取器
-    # 使用 segmenter 内部的 _extractor_for_inference (fit 时已设好可靠度/先验)
-    extractor_for_inference = getattr(segmenter, '_extractor_for_inference', None)
-    if extractor_for_inference is not None:
-        lex_path = saved_models_dir / f"{method_name}_lexicon.pkl"
-        extractor_for_inference.save(str(lex_path))
-        print(f"  ✓ Lexicon extractor saved to {lex_path}")
-    elif lexicon_extractor is not None:
-        lex_path = saved_models_dir / f"{method_name}_lexicon.pkl"
-        lexicon_extractor.save(str(lex_path))
-        print(f"  ✓ Lexicon extractor (base) saved to {lex_path}")
-
-    # 3) 保存 gap (unlabeled) 特征提取器
-    unlabeled = getattr(segmenter, '_unlabeled_extractor', None)
-    if unlabeled is not None and isinstance(unlabeled, UnlabeledStatsExtractor):
-        gap_path = saved_models_dir / f"{method_name}_gap.pkl"
-        unlabeled.save(str(gap_path))
-        print(f"  ✓ Gap extractor saved to {gap_path}")
-
-    print(f"\n  Inference model saved to {saved_models_dir}/")
-    print(f"  Files: {', '.join(p.name for p in saved_models_dir.glob(f'{method_name}_*'))}")
+def _save_inference_model(methods, method_name, lexicon_extractor=None):
+    """保存完整推理模型到 saved_models/ 目录 (委托到 utils.helpers)。"""
+    from utils.helpers import save_inference_model as _save_impl
+    _save_impl(methods, method_name, BASE, lexicon_extractor=lexicon_extractor)
 
 
 
@@ -360,13 +306,13 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  python run_pretrain.py --pretrain --mask-mode mixed
-  python run_pretrain.py --pretrain --mask-mode single
-  python run_pretrain.py --phase2 --pretrained-model output/pretrain/tangut_encoder_mixed/best_model0721.pt
-  python run_pretrain.py --phase2 --pretrained-model ... --phase2-max-steps 3000 --lambda-word 0.3
-  python run_pretrain.py --phase2 --pretrained-model ... --seg --cv  # Phase 2 + 下游验证
-  python run_pretrain.py --seg --pretrained-model output/pretrain/tangut_encoder_phase2/best_model.pt
-  python run_pretrain.py --seg --max 500 --folds 3
+  python train_pretrain.py --pretrain --mask-mode mixed
+  python train_pretrain.py --pretrain --mask-mode single
+  python train_pretrain.py --phase2 --pretrained-model output/pretrain/tangut_encoder_mixed/best_model0721.pt
+  python train_pretrain.py --phase2 --pretrained-model ... --phase2-max-steps 3000 --lambda-word 0.3
+  python train_pretrain.py --phase2 --pretrained-model ... --seg --cv  # Phase 2 + 下游验证
+  python train_pretrain.py --seg --pretrained-model output/pretrain/tangut_encoder_phase2/best_model.pt
+  python train_pretrain.py --seg --max 500 --folds 3
         """,
     )
     parser.add_argument("--pretrain", action="store_true",
