@@ -114,6 +114,10 @@ def words_to_bies(words: List[str]) -> List[str]:
 def bies_to_words(chars: List[str], bies_tags: List[str]) -> List[str]:
     """将 BIES 标签序列 + 字符序列还原为词列表。
 
+    鲁棒处理非法标签序列（如连续 B）：
+        - 遇到 B 时若 buf 非空，先输出 buf
+        - 遇到 S/E 时若 buf 非空，也先输出 buf
+
     >>> bies_to_words(list("我喜欢吃苹果"), ["S","B","E","S","B","E"])
     ["我", "喜欢", "吃", "苹果"]
     """
@@ -121,15 +125,24 @@ def bies_to_words(chars: List[str], bies_tags: List[str]) -> List[str]:
     buf = ""
     for ch, tag in zip(chars, bies_tags):
         if tag == "S":
+            if buf:
+                words.append(buf)
+                buf = ""
             words.append(ch)
         elif tag == "B":
+            if buf:
+                words.append(buf)
             buf = ch
         elif tag == "I":
             buf += ch
         elif tag == "E":
-            buf += ch
-            words.append(buf)
-            buf = ""
+            if buf:
+                buf += ch
+                words.append(buf)
+                buf = ""
+            else:
+                # 孤立 E: 当作单字词
+                words.append(ch)
     if buf:
         words.append(buf)
     return words
