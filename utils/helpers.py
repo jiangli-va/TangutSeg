@@ -236,6 +236,92 @@ def append_run_log(
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
+def save_inference_model(
+    methods: Dict,
+    method_name: str,
+    base_dir: Path,
+    lexicon_extractor=None,
+) -> None:
+    """保存完整推理模型到指定目录。
+
+    支持 TangutEncoderSegmenter (.pt) 和 CRFSegmenter (.joblib):
+        - TEnc: <name>_model.pt + <name>_lexicon.pkl + <name>_gap.pkl
+        - CRF:  <name>_model.joblib + <name>_lexicon.pkl + <name>_gap.pkl
+
+    Args:
+        methods: {方法名: Segmenter实例}
+        method_name: 要保存的方法名
+        base_dir: 保存根目录 (如 BASE / "saved_models")
+        lexicon_extractor: 备选词典提取器 (当 segmenter 内部没有时使用)
+    """
+    # lazy import 避免循环依赖
+    from models.crf import CRFSegmenter
+    try:
+        from pretrain.segmenter import TangutEncoderSegmenter
+    except ImportError:
+        TangutEncoderSegmenter = None
+
+    saved_models_dir = base_dir / "saved_models"
+    saved_models_dir.mkdir(parents=True, exist_ok=True)
+
+    if method_name not in methods:
+        print(f"[WARN] 方法 '{method_name}' 未找到，不可保存。可用方法: {list(methods.keys())}")
+        return
+
+    segmenter = methods[method_name]
+    is_crf = isinstance(segmenter, CRFSegmenter)
+    is_tenc = (TangutEncoderSegmenter is not None
+               and isinstance(segmenter, TangutEncoderSegmenter))
+
+    if not is_crf and not is_tenc:
+        print(f"[WARN] '{method_name}' 类型不支持保存为推理模型 "
+              f"(需要 CRFSegmenter 或 TangutEncoderSegmenter)")
+        return
+
+    print(f"\n{'=' * 60}")
+    print(f"  Saving inference model: {method_name}")
+    print(f"{'=' * 60}\n")
+
+    # 1) 保存模型
+    if is_crf:
+        model_path = saved_models_dir / f"{method_name}_model.joblib"
+        segmenter.save(str(model_path))
+    else:
+        model_path = saved_models_dir / f"{method_name}_model.pt"
+        segmenter.save(str(model_path))
+    print(f"  ✓ Model saved to {model_path}")
+
+    # 2) 保存词典特征提取器
+    if is_crf:
+        # CRF fit 时直接修改了 _lexicon_extractor
+        extractor_for_inference = getattr(segmenter, '_lexicon_extractor', None)
+    else:
+        extractor_for_inference = getattr(segmenter, '_extractor_for_inference', None)
+
+    if extractor_for_inference is not None:
+        lex_path = saved_models_dir / f"{method_name}_lexicon.pkl"
+        extractor_for_inference.save(str(lex_path))
+        print(f"  ✓ Lexicon extractor saved to {lex_path}")
+    elif lexicon_extractor is not None:
+        lex_path = saved_models_dir / f"{method_name}_lexicon.pkl"
+        lexicon_extractor.save(str(lex_path))
+        print(f"  ✓ Lexicon extractor (base) saved to {lex_path}")
+
+    # 3) 保存 gap (unlabeled) 特征提取器
+    try:
+        from models.unlabeled_stats import UnlabeledStatsExtractor
+        unlabeled = getattr(segmenter, '_unlabeled_extractor', None)
+        if unlabeled is not None and isinstance(unlabeled, UnlabeledStatsExtractor):
+            gap_path = saved_models_dir / f"{method_name}_gap.pkl"
+            unlabeled.save(str(gap_path))
+            print(f"  ✓ Gap extractor saved to {gap_path}")
+    except ImportError:
+        pass
+
+    print(f"\n  Inference model saved to {saved_models_dir}/")
+    print(f"  Files: {', '.join(p.name for p in saved_models_dir.glob(f'{method_name}_*'))}")
+
+
 class Timer:
     """简单的计时上下文管理器。"""
 
