@@ -191,6 +191,26 @@ class TangutEncoderBIESCRF(nn.Module):
         self.start_transitions = nn.Parameter(torch.randn(tagset_size) * 0.01)
         self.end_transitions = nn.Parameter(torch.randn(tagset_size) * 0.01)
 
+        # BIES 转移约束: B=0, I=1, E=2, S=3
+        # 合法转移: B→I, B→E | I→E | E→B, E→S | S→B, S→S
+        self._trans_mask = torch.ones(tagset_size, tagset_size, dtype=torch.bool)
+        self._trans_mask[0, 0] = False  # B → B
+        self._trans_mask[0, 3] = False  # B → S
+        self._trans_mask[1, 0] = False  # I → B
+        self._trans_mask[1, 1] = False  # I → I
+        self._trans_mask[1, 3] = False  # I → S
+        self._trans_mask[2, 1] = False  # E → I
+        self._trans_mask[2, 2] = False  # E → E
+        self._trans_mask[3, 1] = False  # S → I
+        self._trans_mask[3, 2] = False  # S → E
+        self.register_buffer('_trans_mask_buffer', self._trans_mask.clone(), persistent=False)
+
+        # 句首/句尾约束
+        self._start_mask = torch.tensor([True, False, False, True], dtype=torch.bool)  # B, S only
+        self._end_mask = torch.tensor([False, False, True, True], dtype=torch.bool)  # E, S only
+        self.register_buffer('_start_mask_buffer', self._start_mask.clone(), persistent=False)
+        self.register_buffer('_end_mask_buffer', self._end_mask.clone(), persistent=False)
+
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -295,17 +315,29 @@ class TangutEncoderBIESCRF(nn.Module):
         batch_size, seq_len, tagset_size = emissions.shape
         mask_float = mask.float()
 
-        scores = self.start_transitions + emissions[:, 0]
+        # 应用 BIES 转移约束: 非法转移设为 -inf
+        trans_constrained = self.transitions.clone()
+        trans_constrained[~self._trans_mask_buffer] = float('-inf')
+
+        # 句首约束
+        start_constrained = self.start_transitions.clone()
+        start_constrained[~self._start_mask_buffer] = float('-inf')
+
+        # 句尾约束
+        end_constrained = self.end_transitions.clone()
+        end_constrained[~self._end_mask_buffer] = float('-inf')
+
+        scores = start_constrained + emissions[:, 0]
         backpointers = []
         for t in range(1, seq_len):
-            next_scores = (scores.unsqueeze(2) + self.transitions.unsqueeze(0)
+            next_scores = (scores.unsqueeze(2) + trans_constrained.unsqueeze(0)
                            + emissions[:, t].unsqueeze(1))
             best_scores, best_tags = next_scores.max(dim=1)
             m = mask_float[:, t].unsqueeze(1)
             scores = best_scores * m + scores * (1 - m)
             backpointers.append(best_tags)
 
-        scores = scores + self.end_transitions.unsqueeze(0)
+        scores = scores + end_constrained.unsqueeze(0)
         best_last_tags = scores.argmax(dim=1).tolist()
 
         best_paths = []
