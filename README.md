@@ -10,9 +10,17 @@ TangutSeg 是一个面向**西夏文自动分词**的研究项目，也是已知
 
 本项目受中国社会科学院学科建设“登峰战略”资助计划（DF2023TS05）、中国社会科学院语言学重点实验室（2024SYZH001）资助。
 
-请参阅：
-```txt
-
+请引用：
+```bibtex
+@misc{deng2026tangutwordsegmentationextreme,
+      title={Tangut Word Segmentation under Extreme Resource Scarcity: Integrating Traditional Lexicons and Unlabeled Text}, 
+      author={Lifan Deng and Yongwei Zhang and Sen Sun and Bojun Sun and Jingsong Yu},
+      year={2026},
+      eprint={2608.18437},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL},
+      url={https://arxiv.org/abs/2608.18437}, 
+}
 ```
 
 ## 核心思路
