@@ -93,11 +93,12 @@ python train_seg.py
           bilstm1 # BiLSTM-CRF + BIE × 词长(11维)
           bilstm2 # BiLSTM-CRF + BIE + Relation Seen(14维)
           bilstm3 # BiLSTM-CRF + Relation All(17维)
-          bilstm4 # BiLSTM-CRF + rel_all + internal_dict(17 + 11维)
-          bilstm5 # BiLSTM-CRF + rel_all + internal_dict + domain(17 + 11 + 2维)
-          bilstm6 #     + freq(17 + 11 + 2 + 2维)
-          bilstm7 #     + freq + 关联度量(17 + 11 + 2 + 4维)
-          bilstm8 #     + freq + 关联度量 + entropy(17 + 11 + 2 + 8维)
+          bilstm4 # BiLSTM-CRF + dict_full(20维,同CRF5)
+          bilstm5 # BiLSTM-CRF + dict_full + internal(20 + 11维)
+          bilstm6 # BiLSTM-CRF + dict_full + internal + domain(20 + 11 + 2维)
+          bilstm7 #     + freq(20 + 11 + 2 + 2维)
+          bilstm8 #     + freq + 关联度量(20 + 11 + 2 + 4维)
+          bilstm9 #     + freq + 关联度量 + entropy(20 + 11 + 2 + 8维)
 ```
 
 ### 训练分词-词性标注联合模型

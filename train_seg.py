@@ -22,11 +22,10 @@
     │                  │   6=dict_full+freq, 7=dict_full+freq+assoc,          │
     │                  │   8=dict_full+dist_all, 9=dict_full+freq+entropy)    │
     │ bilstm           │ BiLSTM-CRF (无词典特征, level=0)                     │
-    │ bilstm0 ~ bilstm8│ BiLSTM-CRF 词典特征消融                              │
-    │                  │   0=无,1=BIE,2=+rel_seen,3=+rel_all,                │
-    │                  │   4=+internal, 5=+internal+domain(全词典),           │
-    │                  │   6~8=全词典+gap (同CRF 6~8)                         │
-    │                  │   注意: level 4 语义与 CRF 不同 (BiLSTM 无 meta)     │
+    │ bilstm0 ~ bilstm9│ BiLSTM-CRF 词典特征消融                              │
+    │                  │   0=无,1=BIE,2=+rel_seen,3=+rel_all(dict_core),      │
+    │                  │   4=dict_full(20维,同CRF5),5=+internal,6=+domain,    │
+    │                  │   7~9=+gap (同CRF 6~8)                               │
     │ ltp              │ LTP 外部分词工具 (需安装 ltp)                        │
     │ hanlp            │ HanLP 外部分词工具 (需安装 hanlp)                    │
     │ stanza           │ Stanza 外部分词工具 (需安装 stanza)                   │
@@ -35,7 +34,7 @@
 
     注意: "dict" 会匹配 dict1/2/3 全部三种词典来源。
           "crf" 会匹配 crf + crf0~crf8 全部 CRF 变体。
-          "bilstm" 会匹配 bilstm + bilstm0~bilstm8 全部 BiLSTM-CRF 变体。
+          "bilstm" 会匹配 bilstm + bilstm0~bilstm9 全部 BiLSTM-CRF 变体。
           可用 "crf5" 或 "crf6,crf7,crf8" 精确指定某几个变体。
 
 流程概览:
@@ -176,12 +175,15 @@ def build_methods(which: Optional[List[str]] = None) -> Dict[str, 'Segmenter']:
                         gap_feature_level=gap_lv,
                     )
 
-    # ---- BiLSTM-CRF (与 CRF 对应的词典特征消融变体 v3) ----
+    # ---- BiLSTM-CRF (与 CRF 对应的词典特征消融变体 v4) ----
+    # 0=baseline, 1=BIE, 2=+rel_seen, 3=+rel_all(=dict_core, 17维),
+    # 4=dict_full(20维, 同CRF level 5), 5=+internal, 6=+domain,
+    # 7=+gap=freq, 8=+gap=freq+assoc, 9=+gap=freq+assoc+entropy
     bilstm_levels = {
         "bilstm": 0,
         "bilstm0": 0, "bilstm1": 1, "bilstm2": 2, "bilstm3": 3,
-        "bilstm4": 4, "bilstm5": 5,
-        "bilstm6": 6, "bilstm7": 7, "bilstm8": 8,
+        "bilstm4": 4, "bilstm5": 5, "bilstm6": 6,
+        "bilstm7": 7, "bilstm8": 8, "bilstm9": 9,
     }
     bilstm_requested = which is None or any(k in bilstm_levels and k in which for k in bilstm_levels)
     if bilstm_requested:
@@ -195,20 +197,21 @@ def build_methods(which: Optional[List[str]] = None) -> Dict[str, 'Segmenter']:
         bilstm_label = {
             0: "BiLSTM-0", 1: "BiLSTM-BIE",
             2: "BiLSTM-rel_seen", 3: "BiLSTM-rel_all",
-            4: "BiLSTM+internal", 5: "BiLSTM+internal+domain",
-            6: f"BiLSTM+internal+domain+freq",
-            7: f"BiLSTM+internal+domain+freq+{_metric_label}",
-            8: f"BiLSTM+internal+domain+freq+{_metric_label}+entropy",
+            4: "BiLSTM+dict_full", 5: "BiLSTM+dict_full+internal",
+            6: "BiLSTM+dict_full+internal+domain",
+            7: f"BiLSTM+dict_full+internal+domain+freq",
+            8: f"BiLSTM+dict_full+internal+domain+freq+{_metric_label}",
+            9: f"BiLSTM+dict_full+internal+domain+freq+{_metric_label}+entropy",
         }
         for key, level in bilstm_levels.items():
             if which is None or key in which or "bilstm" in which:
                 use_lexicon = bilstm_shared_lexicon if level > 0 else None
-                # level >= 4: 需要 internal trie; 先传一个空占位, fit() 时会 OOF 重建
-                internal_trie = bilstm_shared_lexicon.trie if level >= 4 else None
+                # level >= 5: 需要 internal trie; 先传一个空占位, fit() 时会 OOF 重建
+                internal_trie = bilstm_shared_lexicon.trie if level >= 5 else None
                 domain_dist_dim = config.BILSTM_CRF_PARAMS.get("domain_dist_dim", 2)
                 jingshu_loss_weight = config.BILSTM_CRF_PARAMS.get("jingshu_loss_weight", 1.0)
-                # gap 特征: level 6-8 对应 gap_level 1-3
-                gap_lv = max(0, level - 5)
+                # gap 特征: level 7-9 对应 gap_level 1-3 (freq / freq+assoc / all)
+                gap_lv = max(0, level - 6)
                 use_gap_extractor = shared_unlabeled if gap_lv > 0 else None
                 all_methods[bilstm_label[level]] = BiLSTMCRFSegmenter(
                     embedding_dim=config.BILSTM_CRF_PARAMS["embedding_dim"],
@@ -224,7 +227,7 @@ def build_methods(which: Optional[List[str]] = None) -> Dict[str, 'Segmenter']:
                     early_stop_patience=config.BILSTM_CRF_PARAMS["early_stop_patience"],
                     grad_clip=config.BILSTM_CRF_PARAMS["grad_clip"],
                     lexicon_extractor=use_lexicon,
-                    dict_feature_level=min(level, 5),
+                    dict_feature_level=level,
                     dict_dropout=config.BILSTM_CRF_PARAMS["dict_dropout"],
                     internal_trie=internal_trie,
                     domain_dist_dim=domain_dist_dim,

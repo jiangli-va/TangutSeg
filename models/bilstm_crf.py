@@ -4,10 +4,10 @@
     字符 → Embedding(随机初始化) → 拼接特征块 → BiLSTM → Linear → CRF → BIES 标签
 
 特征块:
-    - 外部词典格网 (17 维): BIE×词长 + rel_seen + rel_unseen
+    - 外部词典格网 (20 维): BIE×词长 + rel_seen + rel_unseen + 元数据 (dict_full)
     - internal-only 格网 (11 维): 训练集独有词的 BIE×词长
     - 领域分布向量 (2 维): 逐位置拼接词级领域分布 [经书比例, 世俗比例]
-    - 分布统计特征 (8 维): 词频、字符关联度和边界熵等
+    - 分布统计特征 (2/4/8 维): 词频、字符关联度和边界熵等 (按 gap_feature_level 切片)
 
 """
 
@@ -41,7 +41,19 @@ from models.lexicon import (
     extract_domain_vec,
     compute_oof_domain_vectors,
 )
+from models.unlabeled_stats import _GAP_LEVEL_INDICES
 from data.dataset import words_to_bies, bies_to_words
+
+
+def _dict_level_for_bilstm(level: int) -> int:
+    """把 BiLSTM 的累积 level 映射为词典消融级别 (用于 _slice_dict_vec / 维度计算)。
+
+    level 0-3 保持原消融级别; level >= 4 起外部词典特征与 CRF 的 dict_full(level 5)
+    一致, 即完整 20 维 (BIE + rel_all + meta)。
+    """
+    if level <= 3:
+        return level
+    return 5  # dict_full (20 维)
 
 
 def _slice_dict_vec(vec: np.ndarray, level: int) -> np.ndarray:
@@ -49,7 +61,7 @@ def _slice_dict_vec(vec: np.ndarray, level: int) -> np.ndarray:
 
     Args:
         vec: (seq_len, 20) 的 numpy 数组
-        level: 0-3
+        level: 词典消融级别 0-5 (见 _dict_level_for_bilstm)
 
     Returns:
         (seq_len, D_level) 的切片
@@ -370,18 +382,19 @@ class BiLSTMCRFSegmenter(Segmenter):
 
     支持外部词典、internal-only 词典、领域分布向量和 gap 特征。
 
-    dict_feature_level:
+    dict_feature_level (累积式):
         0 = 不使用词典特征 (baseline)
         1 = 外部 BIE × 词长 (11 维)
         2 = 外部 BIE + rel_seen (14 维)
-        3 = 外部 BIE + rel_all (17 维)
-        4 = level 3 + internal-only BIE (28 维)
-        5 = level 4 + 领域分布向量 (30 维)
-        6 = level 5 + gap=freq (30+8=38 维)
-        7 = level 5 + gap=freq+Dice (30+8=38 维)
-        8 = level 5 + gap=all (30+8=38 维)
+        3 = 外部 BIE + rel_all = dict_core (17 维)
+        4 = dict_full (20 维, 同 CRF 的 level 5)
+        5 = level 4 + internal-only BIE (20+11=31 维)
+        6 = level 5 + 领域分布向量 (20+11+2=33 维)
+        7 = level 6 + gap=freq (20+11+2+2=35 维)
+        8 = level 6 + gap=freq+assoc (20+11+2+4=37 维)
+        9 = level 6 + gap=all (20+11+2+8=41 维)
 
-    gap_feature_level: 自动从 dict_feature_level 推导 (level-5)，仅 6/7/8 有效。
+    gap_feature_level: 自动从 dict_feature_level 推导 (level-6)，仅 7/8/9 有效。
     """
 
     name = "BiLSTM-CRF"
@@ -426,7 +439,7 @@ class BiLSTMCRFSegmenter(Segmenter):
         self._dict_dropout = dict_dropout
         self._internal_trie = internal_trie
         self._internal_trie_for_inference = None
-        self._domain_dist_dim = domain_dist_dim if dict_feature_level >= 5 else 0
+        self._domain_dist_dim = domain_dist_dim if dict_feature_level >= 6 else 0
         self._domain_dist_for_inference = None
         self._domain_fallback_for_inference = None
         self._jingshu_loss_weight = jingshu_loss_weight
@@ -435,7 +448,8 @@ class BiLSTMCRFSegmenter(Segmenter):
         # gap 特征
         self._unlabeled_extractor = unlabeled_extractor
         self._gap_feature_level = gap_feature_level
-        self._gap_feat_dim = 0
+        self._gap_indices: List[int] = _GAP_LEVEL_INDICES.get(gap_feature_level, [])
+        self._gap_feat_dim = len(self._gap_indices)
 
         self._model: Optional[BiLSTMCRFModel] = None
         self._char2idx: Dict[str, int] = {}
@@ -450,7 +464,7 @@ class BiLSTMCRFSegmenter(Segmenter):
 
     @property
     def _use_internal(self) -> bool:
-        return self._dict_feature_level >= 4
+        return self._dict_feature_level >= 5
 
     @property
     def _use_domain(self) -> bool:
@@ -461,8 +475,8 @@ class BiLSTMCRFSegmenter(Segmenter):
         return self._unlabeled_extractor is not None and self._gap_feature_level > 0
 
     def _get_dict_feat_dim(self) -> int:
-        """外部词典特征维度 (level 0-3 的 ext 特征)。level 4/5 沿用 level 3。"""
-        indices = LEVEL_INDICES.get(min(self._dict_feature_level, 3), [])
+        """外部词典特征维度。level 0-3 按消融级别, level>=4 为 dict_full (20 维)。"""
+        indices = LEVEL_INDICES.get(_dict_level_for_bilstm(self._dict_feature_level), [])
         return len(indices)
 
     @staticmethod
@@ -617,8 +631,8 @@ class BiLSTMCRFSegmenter(Segmenter):
                 ]
                 self._extractor_for_inference = self._lexicon_extractor
 
-            # 按 level 切片 (level 4/5 的外部特征与 level 3 相同)
-            _ext_level = min(self._dict_feature_level, 3)
+            # 按 level 切片 (level>=4 的外部特征与 dict_full 相同: 20 维)
+            _ext_level = _dict_level_for_bilstm(self._dict_feature_level)
             train_dict_vecs = [
                 _slice_dict_vec(v, _ext_level)
                 for v in train_dict_vecs_full20
@@ -660,15 +674,31 @@ class BiLSTMCRFSegmenter(Segmenter):
         train_gap_vecs: Optional[List[np.ndarray]] = None
         dev_gap_vecs: Optional[List[np.ndarray]] = None
         if self._use_gap:
-            self._gap_feat_dim = 8  # 始终8维, gap_feature_level 控制 CRF 用哪些列
+            self._gap_feat_dim = len(self._gap_indices)  # 按 gap_level 切片后的维度
             ext = self._unlabeled_extractor
             train_sents = ["".join(w) for w in train_words]
-            train_gap_vecs = [ext.extract(s, gap_level=self._gap_feature_level)
-                              for s in train_sents]
+            if self._gap_indices:
+                train_gap_vecs = [
+                    ext.extract(s)[:, self._gap_indices]
+                    for s in train_sents
+                ]
+            else:
+                train_gap_vecs = [
+                    np.zeros((len(s), 0), dtype=np.float32)
+                    for s in train_sents
+                ]
             if dev_words is not None and len(dev_words) > 0:
                 dev_sents = ["".join(w) for w in dev_words]
-                dev_gap_vecs = [ext.extract(s, gap_level=self._gap_feature_level)
-                                for s in dev_sents]
+                if self._gap_indices:
+                    dev_gap_vecs = [
+                        ext.extract(s)[:, self._gap_indices]
+                        for s in dev_sents
+                    ]
+                else:
+                    dev_gap_vecs = [
+                        np.zeros((len(s), 0), dtype=np.float32)
+                        for s in dev_sents
+                    ]
 
         # 初始化模型
         self._model = BiLSTMCRFModel(
@@ -819,7 +849,7 @@ class BiLSTMCRFSegmenter(Segmenter):
         dv_tensor = None
         if self._use_dict and hasattr(self, '_extractor_for_inference'):
             full_vec = self._extractor_for_inference.extract(sentence)
-            sliced = _slice_dict_vec(full_vec, min(self._dict_feature_level, 3))
+            sliced = _slice_dict_vec(full_vec, _dict_level_for_bilstm(self._dict_feature_level))
             dv_tensor = torch.from_numpy(sliced).unsqueeze(0).to(self._device, non_blocking=True)
 
         iv_tensor = None
@@ -841,7 +871,9 @@ class BiLSTMCRFSegmenter(Segmenter):
 
         gap_tensor = None
         if self._use_gap:
-            gv = self._unlabeled_extractor.extract(sentence, gap_level=self._gap_feature_level)
+            gv = self._unlabeled_extractor.extract(sentence)
+            if self._gap_indices:
+                gv = gv[:, self._gap_indices]
             gap_tensor = torch.from_numpy(gv).unsqueeze(0).to(self._device, non_blocking=True)
 
         self._model.eval()
@@ -875,7 +907,7 @@ class BiLSTMCRFSegmenter(Segmenter):
             all_lengths.append(len(indices))
             if self._use_dict and hasattr(self, '_extractor_for_inference'):
                 full_vec = self._extractor_for_inference.extract(sent)
-                all_dv.append(_slice_dict_vec(full_vec, min(self._dict_feature_level, 3)))
+                all_dv.append(_slice_dict_vec(full_vec, _dict_level_for_bilstm(self._dict_feature_level)))
             if self._use_internal and self._internal_trie_for_inference is not None:
                 iv = np.zeros((len(chars), INTERNAL_BIE_DIM), dtype=np.float32)
                 extract_internal_bie(chars, self._internal_trie_for_inference, iv, 0)
@@ -890,7 +922,10 @@ class BiLSTMCRFSegmenter(Segmenter):
                 )
                 all_ddom.append(dvec)
             if self._use_gap:
-                all_gap.append(self._unlabeled_extractor.extract(sent, gap_level=self._gap_feature_level))
+                gv = self._unlabeled_extractor.extract(sent)
+                if self._gap_indices:
+                    gv = gv[:, self._gap_indices]
+                all_gap.append(gv)
 
         sorted_idx = sorted(range(len(all_indices)), key=lambda i: all_lengths[i], reverse=True)
         max_len = all_lengths[sorted_idx[0]]
@@ -964,10 +999,13 @@ class BiLSTMCRFSegmenter(Segmenter):
                 "internal_feat_dim": self._internal_feat_dim,
                 "domain_dist_dim": self._domain_dist_dim,
                 "dict_dropout": self._dict_dropout,
+                "gap_feature_level": self._gap_feature_level,
+                "gap_feat_dim": self._gap_feat_dim,
             },
             "extractor_for_inference": self._extractor_for_inference if hasattr(self, '_extractor_for_inference') else None,
             "internal_trie_for_inference": self._internal_trie_for_inference,
             "domain_dist_for_inference": self._domain_dist_for_inference,
+            "unlabeled_extractor": self._unlabeled_extractor,
         }
         joblib.dump(data, path)
 
@@ -989,6 +1027,10 @@ class BiLSTMCRFSegmenter(Segmenter):
         self._internal_feat_dim = cfg.get("internal_feat_dim", 0)
         self._domain_dist_dim = cfg.get("domain_dist_dim", 0)
         self._dict_dropout = cfg.get("dict_dropout", 0.0)
+        self._gap_feature_level = cfg.get("gap_feature_level", 0)
+        self._gap_indices = _GAP_LEVEL_INDICES.get(self._gap_feature_level, [])
+        self._gap_feat_dim = cfg.get("gap_feat_dim", len(self._gap_indices))
+        self._unlabeled_extractor = data.get("unlabeled_extractor", None)
         self._extractor_for_inference = data.get("extractor_for_inference", None)
         self._internal_trie_for_inference = data.get("internal_trie_for_inference", None)
         self._domain_dist_for_inference = data.get("domain_dist_for_inference", None)
