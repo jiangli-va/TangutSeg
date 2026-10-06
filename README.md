@@ -8,21 +8,6 @@ TangutSeg 是一个面向**西夏文自动分词**的研究项目，也是已知
 
 由于西夏文数据稀缺且宝贵，标注语料成本高昂，本项目目前没有公开全部训练数据的计划，但提供了少量的语料示例(`corpus_example/`)。同时，我们将开源所有训练代码，供研究者参考。未来我们将开源成熟的最优分词模型，供学界使用。
 
-本项目受中国社会科学院学科建设“登峰战略”资助计划（DF2023TS05）、中国社会科学院语言学重点实验室（2024SYZH001）资助。
-
-请引用：
-```bibtex
-@misc{deng2026tangutwordsegmentationextreme,
-      title={Tangut Word Segmentation under Extreme Resource Scarcity: Integrating Traditional Lexicons and Unlabeled Text}, 
-      author={Lifan Deng and Yongwei Zhang and Sen Sun and Bojun Sun and Jingsong Yu},
-      year={2026},
-      eprint={2608.18437},
-      archivePrefix={arXiv},
-      primaryClass={cs.CL},
-      url={https://arxiv.org/abs/2608.18437}, 
-}
-```
-
 ## 核心思路
 
 本项目将分词统一建模为字符级 BIES 序列标注，从三个层次利用异质资源：
